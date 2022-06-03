@@ -27,6 +27,7 @@ require (
 	github.com/grafana/dskit v0.0.0-20211103155626-4e784973d341
 	github.com/grafana/loki v1.6.2-0.20211108134117-5b9f5b9efaa5
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db
+	github.com/mitchellh/gox v1.0.1 // indirect
 	github.com/oklog/ulid v1.3.1
 	github.com/opentracing-contrib/go-stdlib v1.0.0
 	github.com/opentracing/opentracing-go v1.2.0

@@ -20,16 +20,16 @@ type MetricsInGrafana struct {
 }
 
 type DashboardMetrics struct {
-	Slug        string   `json:"slug"`
-	UID         string   `json:"uid,omitempty"`
-	Title       string   `json:"title"`
-	Metrics     []string `json:"metrics"`
-	ParseErrors []string `json:"parse_errors"`
+	Slug        string            `json:"slug"`
+	UID         string            `json:"uid,omitempty"`
+	Title       string            `json:"title"`
+	Metrics     map[string]Metric `json:"metrics"`
+	ParseErrors []string          `json:"parse_errors"`
 }
 
 func ParseMetricsInBoard(mig *MetricsInGrafana, board sdk.Board) {
 	var parseErrors []error
-	metrics := make(map[string]struct{})
+	metrics := make(map[string]Metric)
 
 	// Iterate through all the panels and collect metrics
 	for _, panel := range board.Panels {
@@ -71,13 +71,13 @@ func ParseMetricsInBoard(mig *MetricsInGrafana, board sdk.Board) {
 		Slug:        board.Slug,
 		UID:         board.UID,
 		Title:       board.Title,
-		Metrics:     metricsInBoard,
+		Metrics:     metrics,
 		ParseErrors: parseErrs,
 	})
 
 }
 
-func metricsFromTemplating(templating sdk.Templating, metrics map[string]struct{}) []error {
+func metricsFromTemplating(templating sdk.Templating, metrics map[string]Metric) []error {
 	parseErrors := []error{}
 	for _, templateVar := range templating.List {
 		if templateVar.Type != "query" {
@@ -114,7 +114,7 @@ func metricsFromTemplating(templating sdk.Templating, metrics map[string]struct{
 	return parseErrors
 }
 
-func metricsFromPanel(panel sdk.Panel, metrics map[string]struct{}) []error {
+func metricsFromPanel(panel sdk.Panel, metrics map[string]Metric) []error {
 	var parseErrors []error
 
 	targets := panel.GetTargets()
@@ -140,7 +140,29 @@ func metricsFromPanel(panel sdk.Panel, metrics map[string]struct{}) []error {
 	return parseErrors
 }
 
-func parseQuery(query string, metrics map[string]struct{}) error {
+type Metric struct {
+	Labels []string
+}
+
+func unique(arr []string) []string {
+	occurred := map[string]bool{}
+	result := []string{}
+	for e := range arr {
+
+		// check if already the mapped
+		// variable is set to true or not
+		if occurred[arr[e]] != true {
+			occurred[arr[e]] = true
+
+			// Append to result slice.
+			result = append(result, arr[e])
+		}
+	}
+
+	return result
+}
+
+func parseQuery(query string, metrics map[string]Metric) error {
 	query = strings.ReplaceAll(query, `$__interval`, "5m")
 	query = strings.ReplaceAll(query, `$interval`, "5m")
 	query = strings.ReplaceAll(query, `$resolution`, "5s")
@@ -155,7 +177,35 @@ func parseQuery(query string, metrics map[string]struct{}) error {
 
 	parser.Inspect(expr, func(node parser.Node, path []parser.Node) error {
 		if n, ok := node.(*parser.VectorSelector); ok {
-			metrics[n.Name] = struct{}{}
+			// fmt.Println("-------------------")
+			// fmt.Printf("METRIC NAME %v\n", n.Name)
+
+			var labels []string
+			for _, l := range n.LabelMatchers {
+				labels = append(labels, l.Name)
+			}
+
+			if _, exists := metrics[n.Name]; exists {
+				oldCount := len(metrics[n.Name].Labels)
+				newLabels := unique(append(metrics[n.Name].Labels, labels...))
+				newCount := len(newLabels)
+
+				if oldCount != newCount {
+					// fmt.Printf("old labels: %v\n", metrics[n.Name].Labels)
+					// fmt.Printf("new labels: %v\n", newLabels)
+				}
+
+				metrics[n.Name] = Metric{
+					Labels: newLabels,
+				}
+			} else {
+				// fmt.Printf("new metric: %v\n", n.Name)
+				metrics[n.Name] = Metric{
+					Labels: labels,
+				}
+			}
+
+			// fmt.Println("-------------------")
 		}
 
 		return nil
